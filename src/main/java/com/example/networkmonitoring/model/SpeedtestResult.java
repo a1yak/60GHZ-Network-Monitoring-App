@@ -9,4 +9,5 @@ public class SpeedtestResult {
     private boolean reverse;
     private String status;
     private double mbps;
+    private String error;
 }
