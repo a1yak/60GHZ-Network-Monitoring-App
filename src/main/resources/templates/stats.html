@@ -4,6 +4,7 @@
   <title>📡 Wireless Stats</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
@@ -11,7 +12,7 @@
       font-family: 'Arial', sans-serif;
     }
     .container {
-      max-width: 800px;
+      max-width: 1000px;
       margin: auto;
       background: white;
       border-radius: 15px;
@@ -24,6 +25,26 @@
       background: #f8f9fa;
       padding: 20px;
       margin-top: 20px;
+    }
+    .stat-card {
+      border-radius: 10px;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+      transition: transform 0.3s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-5px);
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .stat-label {
+      color: #666;
+      font-size: 14px;
     }
     .btn-primary {
       background: linear-gradient(135deg, #007bff, #0056b3);
@@ -60,33 +81,292 @@
     .icon {
       margin-right: 10px;
     }
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-bottom: 20px;
+    }
+    .alert {
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+    .good-signal {
+      color: #28a745;
+    }
+    .medium-signal {
+      color: #ffc107;
+    }
+    .poor-signal {
+      color: #dc3545;
+    }
   </style>
 </head>
 <body>
 <div class="container">
   <h1><i class="fas fa-wifi icon"></i>📡 Wireless Stats</h1>
+
+  <!-- Error Alert -->
+  <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
   <div class="text-center mb-4">
-    <button class="btn btn-primary" onclick="fetchStats()">
+    <button class="btn btn-primary" onclick="location.reload()">
       <i class="fas fa-sync icon"></i>🔄 Refresh Stats
     </button>
   </div>
 
-  <!-- Display Wireless Stats -->
+  <!-- Key Stats Cards -->
+  <div class="row mb-4" th:if="${peer != null}">
+    <div class="col-md-3">
+      <div class="stat-card text-center">
+        <div class="stat-label">Signal Strength</div>
+        <div class="stat-value" th:classappend="${peer.rssi > -50 ? 'good-signal' : (peer.rssi > -70 ? 'medium-signal' : 'poor-signal')}" th:text="${peer.rssi} + ' dBm'">-70 dBm</div>
+        <i class="fas fa-signal fa-2x" th:classappend="${peer.rssi > -50 ? 'good-signal' : (peer.rssi > -70 ? 'medium-signal' : 'poor-signal')}"></i>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card text-center">
+        <div class="stat-label">TX Rate</div>
+        <div class="stat-value" th:text="${peer.tx_rate / 1000} + ' Mbps'">0 Mbps</div>
+        <i class="fas fa-upload fa-2x text-primary"></i>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card text-center">
+        <div class="stat-label">RX Rate</div>
+        <div class="stat-value" th:text="${peer.rx_rate / 1000} + ' Mbps'">0 Mbps</div>
+        <i class="fas fa-download fa-2x text-success"></i>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="stat-card text-center">
+        <div class="stat-label">Connection Time</div>
+        <div class="stat-value" th:text="${peer.connection_time / 60} + ' min'">0 min</div>
+        <i class="fas fa-clock fa-2x text-info"></i>
+      </div>
+    </div>
+  </div>
+
+  <!-- Signal Strength Chart -->
   <div class="card">
-    <h4><i class="fas fa-chart-bar icon"></i>📊 JSON Data</h4>
-    <pre th:text="${jsonResponse}">Loading...</pre>
+    <h4><i class="fas fa-chart-bar icon"></i>📊 Signal Strength</h4>
+    <div class="chart-container">
+      <canvas id="signalChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Data Rates Chart -->
+  <div class="card">
+    <h4><i class="fas fa-chart-line icon"></i>📊 Data Rates</h4>
+    <div class="chart-container">
+      <canvas id="rateChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Data Usage Chart -->
+  <div class="card">
+    <h4><i class="fas fa-chart-pie icon"></i>📊 Data Usage</h4>
+    <div class="chart-container">
+      <canvas id="usageChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Connection Details -->
+  <div class="card" th:if="${peer != null}">
+    <h4><i class="fas fa-info-circle icon"></i>ℹ️ Connection Details</h4>
+    <div class="row">
+      <div class="col-md-6">
+        <p><strong>MAC Address:</strong> <span th:text="${peer.mac}">Unknown</span></p>
+        <p><strong>IPv4:</strong> <span th:text="${peer.ipv4}">Unknown</span></p>
+        <p><strong>IPv6:</strong> <span th:text="${peer.ipv6}">Unknown</span></p>
+        <p><strong>System Name:</strong> <span th:text="${peer.system_name}">Unknown</span></p>
+      </div>
+      <div class="col-md-6">
+        <p><strong>MCS Index TX:</strong> <span th:text="${peer.tx_mcs}">Unknown</span></p>
+        <p><strong>MCS Index RX:</strong> <span th:text="${peer.rx_mcs}">Unknown</span></p>
+        <p><strong>SNR:</strong> <span th:text="${peer.snr} + ' dB'">Unknown</span></p>
+        <p><strong>Est. Link Distance:</strong> <span th:text="${peer.est_link_distance} + ' m'">Unknown</span></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Radio Information -->
+  <div class="card" th:if="${radios != null && !radios.isEmpty()}">
+    <h4><i class="fas fa-broadcast-tower icon"></i>📻 Radio Information</h4>
+    <div th:each="radio : ${radios}" class="mb-3">
+      <h5 th:text="${radio.key}">wlan0</h5>
+      <div class="row">
+        <div class="col-md-6">
+          <p><strong>SSID:</strong> <span th:text="${radio.value.ssid}">Unknown</span></p>
+          <p><strong>Channel:</strong> <span th:text="${radio.value.channel}">Unknown</span></p>
+          <p><strong>Frequency:</strong> <span th:text="${radio.value.freq / 1000} + ' GHz'">Unknown</span></p>
+        </div>
+        <div class="col-md-6">
+          <p><strong>Mode:</strong> <span th:text="${radio.value.op_mode}">Unknown</span></p>
+          <p><strong>TX Power:</strong> <span th:text="${radio.value.tx_power} + ' dBm'">Unknown</span></p>
+          <p><strong>Temperature:</strong> <span th:text="${radio.value.radio_temp} + ' °C'">Unknown</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug: Raw JSON Data (hidden by default) -->
+  <div class="text-center mt-3">
+    <button class="btn btn-sm btn-outline-secondary" onclick="toggleDebug()">
+      <i class="fas fa-bug icon"></i> Toggle Debug Info
+    </button>
+  </div>
+  <div id="debugSection" class="card mt-3" style="display: none;">
+    <h4><i class="fas fa-code icon"></i> Raw JSON Data</h4>
+    <pre th:text="${jsonResponse}">No data available</pre>
   </div>
 </div>
 
-<script>
-  function fetchStats() {
-    fetch('/stats')
-            .then(response => response.text())
-            .then(html => {
-              document.open();
-              document.write(html);
-              document.close();
-            });
+<script th:inline="javascript">
+  // Get data from Thymeleaf
+  const jsonData = /*[[${jsonResponse}]]*/ '{}';
+  const stats = JSON.parse(jsonData);
+
+  // Signal chart
+  const signalCtx = document.getElementById('signalChart').getContext('2d');
+  let signalData = [-100, -100]; // Default values
+  let signalLabels = ['RSSI', 'Remote RSSI'];
+
+  // Rate chart
+  const rateCtx = document.getElementById('rateChart').getContext('2d');
+  let rateData = [0, 0]; // Default values
+  let rateLabels = ['RX Rate (Mbps)', 'TX Rate (Mbps)'];
+
+  // Usage chart
+  const usageCtx = document.getElementById('usageChart').getContext('2d');
+  let usageData = [0, 0]; // Default values
+  let usageLabels = ['TX Bytes', 'RX Bytes'];
+
+  // Extract data if available
+  if (stats && stats.wireless && stats.wireless.peers && stats.wireless.peers.length > 0) {
+    const peer = stats.wireless.peers[0];
+
+    // Signal data
+    signalData = [
+      peer.rssi || -100,
+      peer.remote_rssi || -100
+    ];
+
+    // Rate data
+    rateData = [
+      (peer.rx_rate ? peer.rx_rate / 1000 : 0), // Convert to Mbps
+      (peer.tx_rate ? peer.tx_rate / 1000 : 0)  // Convert to Mbps
+    ];
+
+    // Usage data
+    usageData = [
+      (peer.tx_bytes ? peer.tx_bytes / 1000000 : 0), // Convert to MB
+      (peer.rx_bytes ? peer.rx_bytes / 1000000 : 0)  // Convert to MB
+    ];
+  }
+
+  // Create signal chart
+  new Chart(signalCtx, {
+    type: 'bar',
+    data: {
+      labels: signalLabels,
+      datasets: [{
+        label: 'Signal Strength (dBm)',
+        data: signalData,
+        backgroundColor: [
+          'rgba(54, 162, 235, 0.6)',
+          'rgba(255, 99, 132, 0.6)'
+        ],
+        borderColor: [
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 99, 132, 1)'
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          min: -100,
+          max: 0,
+          title: {
+            display: true,
+            text: 'Signal Strength (dBm)'
+          }
+        }
+      }
+    }
+  });
+
+  // Create rate chart
+  new Chart(rateCtx, {
+    type: 'line',
+    data: {
+      labels: rateLabels,
+      datasets: [{
+        label: 'Data Rates (Mbps)',
+        data: rateData,
+        backgroundColor: 'rgba(0, 188, 212, 0.2)',
+        borderColor: 'rgba(0, 188, 212, 1)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: 'rgba(0, 188, 212, 1)',
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Mbps'
+          }
+        }
+      }
+    }
+  });
+
+  // Create usage chart
+  new Chart(usageCtx, {
+    type: 'pie',
+    data: {
+      labels: usageLabels,
+      datasets: [{
+        data: usageData,
+        backgroundColor: [
+          'rgba(76, 175, 80, 0.7)',
+          'rgba(255, 152, 0, 0.7)'
+        ],
+        borderColor: [
+          'rgba(76, 175, 80, 1)',
+          'rgba(255, 152, 0, 1)'
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.label}: ${context.raw.toFixed(2)} MB`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  function toggleDebug() {
+    const debugSection = document.getElementById('debugSection');
+    debugSection.style.display = debugSection.style.display === 'none' ? 'block' : 'none';
   }
 </script>
 </body>
