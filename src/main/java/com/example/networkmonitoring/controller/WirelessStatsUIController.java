@@ -85,54 +85,52 @@ public class WirelessStatsUIController {
         return "stats";
     }
 
-    @GetMapping("/speedtest")
-    public String getSpeedPage(Model model) {
-        ResponseEntity<String> responseEntity = speedTestService.fetchSpeedtestResults();
-        String response = responseEntity.getBody();
-
-        if (responseEntity.getStatusCode().is2xxSuccessful()) {
-            try {
-                // Parse JSON into SpeedTestResult object
-                SpeedtestResult speedTestResult = objectMapper.readValue(response, SpeedtestResult.class);
-                model.addAttribute("speedtest", speedTestResult); // Add the object to the model
-
-                // Convert SpeedTestResult to JSON string for display
-                String jsonResponse = objectMapper.writeValueAsString(speedTestResult);
-                model.addAttribute("jsonResponse", jsonResponse);
-            } catch (Exception e) {
-                model.addAttribute("speedtest", "Error parsing JSON: " + e.getMessage());
-                model.addAttribute("jsonResponse", "{}"); // Empty JSON in case of error
-            }
-        } else {
-            model.addAttribute("speedtest", "Error: " + response);
-            model.addAttribute("jsonResponse", "{}"); // Empty JSON in case of error
-        }
-        return "speedtest";
-    }
-
     @PostMapping("/speedtest/run")
-    public String runSpeedtest(Model model) {
+    public String runSpeedtest() {
+        // Just initiate the speedtest, don't fetch results yet
         ResponseEntity<String> responseEntity = speedTestService.runSpeedtest();
-        String response = responseEntity.getBody();
+
+        // Redirect to speedtest page where JavaScript will handle polling for results
+        return "redirect:/speedtest";
+    }
+
+
+    @GetMapping("/speedtest/results")
+    @ResponseBody
+    public ResponseEntity<SpeedtestResult> getSpeedtestResults() {
+        ResponseEntity<String> responseEntity = speedTestService.fetchSpeedtestResults();
 
         if (responseEntity.getStatusCode().is2xxSuccessful()) {
             try {
                 // Parse JSON into SpeedTestResult object
-                SpeedtestResult speedTestResult = objectMapper.readValue(response, SpeedtestResult.class);
-                model.addAttribute("speedtest", speedTestResult); // Add the object to the model
-
-                // Convert SpeedTestResult to JSON string for display
-                String jsonResponse = objectMapper.writeValueAsString(speedTestResult);
-                model.addAttribute("jsonResponse", jsonResponse);
+                SpeedtestResult speedTestResult = objectMapper.readValue(responseEntity.getBody(), SpeedtestResult.class);
+                return ResponseEntity.ok(speedTestResult);
             } catch (Exception e) {
-                model.addAttribute("speedtest", "Error parsing JSON: " + e.getMessage());
-                model.addAttribute("jsonResponse", "{}"); // Empty JSON in case of error
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
         } else {
-            model.addAttribute("speedtest", "Error: " + response);
-            model.addAttribute("jsonResponse", "{}"); // Empty JSON in case of error
+            return ResponseEntity.status(responseEntity.getStatusCode()).build();
         }
-        return "speedtest";
     }
 
+    @GetMapping("/speedtest")
+    public String showSpeedtestPage(Model model) {
+        // Get initial results to display
+        ResponseEntity<String> responseEntity = speedTestService.fetchSpeedtestResults();
+
+        if (responseEntity.getStatusCode().is2xxSuccessful()) {
+            try {
+                // Add the JSON string to the model for initial rendering
+                model.addAttribute("jsonResponse", responseEntity.getBody());
+            } catch (Exception e) {
+                // If there's an error, just provide an empty JSON object
+                model.addAttribute("jsonResponse", "{}");
+            }
+        } else {
+            model.addAttribute("jsonResponse", "{}");
+        }
+
+        // Return the speedtest.html template
+        return "speedtest";
+    }
 }

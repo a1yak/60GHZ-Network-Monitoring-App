@@ -14,7 +14,7 @@ public class SpeedTestService {
 
     private final RestTemplate restTemplate = new RestTemplate();
     private static final String SPEEDTEST_URL = "http://192.168.0.103/cgi.lua/apiv1/speedtest";
-    private static final String API_TOKEN ="BD55R53HAAAAAAHRL4MAU2DZ5VWDZ6UF2CPGPC6TSRIQ%3D%3D%3D%3D";
+    private static final String API_TOKEN ="BBHR36DHAAAAAABFXRSDY4IYQ76NJWHGE6UTIGADBJHQ%3D%3D%3D%3D";
 
 
     public ResponseEntity<String> fetchSpeedtestResults() {
