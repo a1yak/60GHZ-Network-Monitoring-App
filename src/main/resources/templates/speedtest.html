@@ -97,15 +97,15 @@
             font-size: 14px;
             margin-top: 15px;
         }
-        .status-complete {
+        .status-excellent {
             background-color: #e8f5e9;
             color: #2e7d32;
         }
-        .status-running {
+        .status-good {
             background-color: #e3f2fd;
             color: #1565c0;
         }
-        .status-error {
+        .status-poor {
             background-color: #ffebee;
             color: #c62828;
         }
@@ -159,6 +159,13 @@
             font-size: 18px;
             color: #333;
         }
+        .gauge-range {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -185,15 +192,17 @@
         <div class="row">
             <div class="col-md-6 text-center">
                 <div id="downloadGauge" class="gauge-container"></div>
+                <div id="gaugeRange" class="gauge-range">
+                    <span>0</span>
+                    <span id="maxSpeedLabel">100</span>
+                </div>
             </div>
             <div class="col-md-6 text-center">
                 <div class="text-center">
-                    <div class="speed-value" th:text="${speedtest != null ? #numbers.formatInteger(speedtest.mbps, 0) : '0'}">0</div>
+                    <div class="speed-value" id="currentSpeedValue" th:text="${speedtest != null ? #numbers.formatInteger(speedtest.mbps, 0) : '0'}">0</div>
                     <div class="speed-unit">Mbps</div>
-                    <div class="status-badge"
-                         th:classappend="${speedtest != null && speedtest.status == 'completed'} ? 'status-complete' : (${speedtest != null && speedtest.status == 'running'} ? 'status-running' : 'status-error')"
-                         th:text="${speedtest != null ? speedtest.status : 'Not Run'}">
-                        Status
+                    <div class="status-badge" id="speedStatus">
+                        Not Run
                     </div>
                 </div>
             </div>
@@ -244,12 +253,27 @@
     const speedtestJson = /*[[${jsonResponse}]]*/ '{}';
     const speedtest = JSON.parse(speedtestJson);
 
-    // Create speed gauge
+    // Create speed gauge with dynamic scaling
     document.addEventListener('DOMContentLoaded', function() {
-        const speed = speedtest ? Math.floor(speedtest.mbps) : 0;
-        const maxSpeed = 100; // Adjust based on your expected maximum speeds
+        const currentSpeed = speedtest ? Math.floor(speedtest.mbps) : 0;
+        document.getElementById('currentSpeedValue').textContent = currentSpeed;
 
-        // Create gauge
+        // Dynamic gauge scaling based on speed
+        let maxSpeed;
+        if (currentSpeed <= 100) {
+            maxSpeed = 100;
+        } else if (currentSpeed <= 500) {
+            maxSpeed = 500;
+        } else if (currentSpeed <= 1000) {
+            maxSpeed = 1000;
+        } else {
+            maxSpeed = Math.ceil(currentSpeed / 1000) * 1000; // Round up to nearest 1000
+        }
+
+        // Update max speed label
+        document.getElementById('maxSpeedLabel').textContent = maxSpeed;
+
+        // Create gauge with dynamic range
         const gaugeElement = document.getElementById('downloadGauge');
         const gaugeOptions = {
             hasNeedle: true,
@@ -258,10 +282,35 @@
             arcColors: ['#f3f3f3', '#e1f5fe', '#b3e5fc', '#81d4fa', '#4fc3f7', '#29b6f6', '#03a9f4', '#039be5', '#0288d1', '#0277bd'],
             arcDelimiters: [10, 20, 30, 40, 50, 60, 70, 80, 90],
             rangeLabel: ['0', maxSpeed.toString()],
-            centralLabel: speed.toString()
+            centralLabel: currentSpeed.toString(),
+            arcPadding: 6,
+            arcPaddingColor: 'white',
+            needleStart: 0
         };
 
-        GaugeChart.gaugeChart(gaugeElement, 300, gaugeOptions).updateNeedle(Math.min(speed * 100 / maxSpeed, 100));
+        // Calculate percentage for needle position (capped at 100%)
+        const needlePosition = Math.min((currentSpeed / maxSpeed) * 100, 100);
+        GaugeChart.gaugeChart(gaugeElement, 300, gaugeOptions).updateNeedle(needlePosition);
+
+        // Update the status display based on speed
+        const statusElement = document.getElementById('speedStatus');
+        if (currentSpeed > 0) {
+            if (currentSpeed >= 100) {
+                statusElement.textContent = 'Excellent';
+                statusElement.className = 'status-badge status-excellent';
+            } else if (currentSpeed >= 50) {
+                statusElement.textContent = 'Good';
+                statusElement.className = 'status-badge status-good';
+            } else {
+                statusElement.textContent = 'Poor';
+                statusElement.className = 'status-badge status-poor';
+            }
+        } else if (speedtest && speedtest.status) {
+            statusElement.textContent = speedtest.status;
+            statusElement.className = 'status-badge ' +
+                (speedtest.status === 'completed' ? 'status-excellent' :
+                    speedtest.status === 'running' ? 'status-good' : 'status-poor');
+        }
     });
 
     function runSpeedtest() {
