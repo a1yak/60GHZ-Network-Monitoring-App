@@ -4,6 +4,7 @@
     <title>🚀 Speedtest Results</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/gauge-chart@0.5.3/dist/bundle.js"></script>
     <style>
         body {
             background: linear-gradient(135deg, #f5f7fa, #c3cfe2);
@@ -11,7 +12,7 @@
             font-family: 'Arial', sans-serif;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: auto;
             background: white;
             border-radius: 15px;
@@ -24,17 +25,31 @@
             background: #f8f9fa;
             padding: 20px;
             margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .stat-card {
+            border-radius: 10px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
         .btn-success {
             background: linear-gradient(135deg, #00b09b, #96c93d);
             border: none;
-            padding: 10px 20px;
+            padding: 12px 25px;
             font-size: 16px;
             border-radius: 25px;
-            transition: transform 0.3s ease;
+            transition: all 0.3s ease;
         }
         .btn-success:hover {
             transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(0, 150, 136, 0.3);
         }
         h1 {
             color: #333;
@@ -60,53 +75,265 @@
         .icon {
             margin-right: 10px;
         }
-        .mbps-value {
-            font-size: 24px;
+        .speed-value {
+            font-size: 46px;
             font-weight: bold;
-            color: #00b09b;
+            background: linear-gradient(135deg, #00b09b, #96c93d);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 10px 0;
+        }
+        .speed-unit {
+            font-size: 18px;
+            color: #666;
+            margin-top: 10px;
+            display: block;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+        .status-excellent {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status-good {
+            background-color: #e3f2fd;
+            color: #1565c0;
+        }
+        .status-poor {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .gauge-container {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .speedtest-info {
+            background-color: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .info-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .info-label {
+            color: #666;
+            font-weight: 500;
+        }
+        .info-value {
+            font-weight: bold;
+            color: #333;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            flex-direction: column;
+        }
+        .loading-text {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+        .gauge-range {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #555;
         }
     </style>
 </head>
 <body>
+<div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="spinner-border text-success" style="width: 3rem; height: 3rem;" role="status"></div>
+    <div class="loading-text">Running speedtest, please wait...</div>
+</div>
+
 <div class="container">
     <h1><i class="fas fa-tachometer-alt icon"></i>🚀 Speedtest Results</h1>
+
+    <!-- Error Alert -->
+    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
     <div class="text-center mb-4">
         <button class="btn btn-success" onclick="runSpeedtest()">
-            <i class="fas fa-sync icon"></i>🔄 Run New Speedtest
+            <i class="fas fa-play icon"></i> Run New Speedtest
         </button>
     </div>
 
-    <!-- Display Speedtest Results -->
+    <!-- Speed Gauge -->
     <div class="card">
-        <h4><i class="fas fa-info-circle icon"></i>📈 Speedtest Summary</h4>
+        <h4 class="text-center"><i class="fas fa-tachometer-alt icon"></i>Network Speed</h4>
         <div class="row">
-            <div class="col-md-6">
-                <p><strong>Peer MAC:</strong> <span th:text="${speedtest.peer_mac}"></span></p>
-                <p><strong>Direction:</strong> <span th:text="${speedtest.reverse ? 'Reverse' : 'Forward'}"></span></p>
+            <div class="col-md-6 text-center">
+                <div id="downloadGauge" class="gauge-container"></div>
+                <div id="gaugeRange" class="gauge-range">
+                    <span>0</span>
+                    <span id="maxSpeedLabel">100</span>
+                </div>
             </div>
-            <div class="col-md-6">
-                <p><strong>Status:</strong> <span th:text="${speedtest.status}"></span></p>
-                <p><strong>Speed:</strong> <span class="mbps-value" th:text="${speedtest.mbps + ' Mbps'}"></span></p>
+            <div class="col-md-6 text-center">
+                <div class="text-center">
+                    <div class="speed-value" id="currentSpeedValue" th:text="${speedtest != null ? #numbers.formatInteger(speedtest.mbps, 0) : '0'}">0</div>
+                    <div class="speed-unit">Mbps</div>
+                    <div class="status-badge" id="speedStatus">
+                        Not Run
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Display Raw JSON Data -->
-    <div class="card">
-        <h4><i class="fas fa-chart-bar icon"></i>📊 JSON Data</h4>
-        <pre th:text="${jsonResponse}">Loading...</pre>
+    <!-- Speedtest Details -->
+    <div class="card" th:if="${speedtest != null}">
+        <h4><i class="fas fa-info-circle icon"></i>Test Details</h4>
+        <div class="speedtest-info">
+            <div class="info-item">
+                <span class="info-label">Peer MAC</span>
+                <span class="info-value" th:text="${speedtest.peer_mac}">Unknown</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Direction</span>
+                <span class="info-value" th:text="${speedtest.reverse ? 'Download (Reverse)' : 'Upload (Forward)'}">Unknown</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Status</span>
+                <span class="info-value" th:text="${speedtest.status}">Unknown</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Speed</span>
+                <span class="info-value" th:text="${#numbers.formatInteger(speedtest.mbps, 0) + ' Mbps'}">0 Mbps</span>
+            </div>
+            <div class="info-item" th:if="${speedtest.error != null}">
+                <span class="info-label">Error</span>
+                <span class="info-value text-danger" th:text="${speedtest.error}">None</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug: Raw JSON Data (hidden by default) -->
+    <div class="text-center mt-3">
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleDebug()">
+            <i class="fas fa-bug icon"></i> Toggle Debug Info
+        </button>
+    </div>
+    <div id="debugSection" class="card mt-3" style="display: none;">
+        <h4><i class="fas fa-code icon"></i> Raw JSON Data</h4>
+        <pre th:text="${jsonResponse}">No data available</pre>
     </div>
 </div>
 
-<script>
+<script th:inline="javascript">
+    // Get data from Thymeleaf
+    const speedtestJson = /*[[${jsonResponse}]]*/ '{}';
+    const speedtest = JSON.parse(speedtestJson);
+
+    // Create speed gauge with dynamic scaling
+    document.addEventListener('DOMContentLoaded', function() {
+        const currentSpeed = speedtest ? Math.floor(speedtest.mbps) : 0;
+        document.getElementById('currentSpeedValue').textContent = currentSpeed;
+
+        // Dynamic gauge scaling based on speed
+        let maxSpeed;
+        if (currentSpeed <= 100) {
+            maxSpeed = 100;
+        } else if (currentSpeed <= 500) {
+            maxSpeed = 500;
+        } else if (currentSpeed <= 1000) {
+            maxSpeed = 1000;
+        } else {
+            maxSpeed = Math.ceil(currentSpeed / 1000) * 1000; // Round up to nearest 1000
+        }
+
+        // Update max speed label
+        document.getElementById('maxSpeedLabel').textContent = maxSpeed;
+
+        // Create gauge with dynamic range
+        const gaugeElement = document.getElementById('downloadGauge');
+        const gaugeOptions = {
+            hasNeedle: true,
+            needleColor: 'rgba(0, 176, 155, 1)',
+            needleUpdateSpeed: 1000,
+            arcColors: ['#f3f3f3', '#e1f5fe', '#b3e5fc', '#81d4fa', '#4fc3f7', '#29b6f6', '#03a9f4', '#039be5', '#0288d1', '#0277bd'],
+            arcDelimiters: [10, 20, 30, 40, 50, 60, 70, 80, 90],
+            rangeLabel: ['0', maxSpeed.toString()],
+            centralLabel: currentSpeed.toString(),
+            arcPadding: 6,
+            arcPaddingColor: 'white',
+            needleStart: 0
+        };
+
+        // Calculate percentage for needle position (capped at 100%)
+        const needlePosition = Math.min((currentSpeed / maxSpeed) * 100, 100);
+        GaugeChart.gaugeChart(gaugeElement, 300, gaugeOptions).updateNeedle(needlePosition);
+
+        // Update the status display based on speed
+        const statusElement = document.getElementById('speedStatus');
+        if (currentSpeed > 0) {
+            if (currentSpeed >= 100) {
+                statusElement.textContent = 'Excellent';
+                statusElement.className = 'status-badge status-excellent';
+            } else if (currentSpeed >= 50) {
+                statusElement.textContent = 'Good';
+                statusElement.className = 'status-badge status-good';
+            } else {
+                statusElement.textContent = 'Poor';
+                statusElement.className = 'status-badge status-poor';
+            }
+        } else if (speedtest && speedtest.status) {
+            statusElement.textContent = speedtest.status;
+            statusElement.className = 'status-badge ' +
+                (speedtest.status === 'completed' ? 'status-excellent' :
+                    speedtest.status === 'running' ? 'status-good' : 'status-poor');
+        }
+    });
+
     function runSpeedtest() {
+        // Show loading overlay
+        document.getElementById('loadingOverlay').style.display = 'flex';
+
         fetch('/speedtest/run', { method: 'POST' })
             .then(response => response.text())
             .then(html => {
                 document.open();
                 document.write(html);
                 document.close();
+            })
+            .catch(error => {
+                // Hide loading overlay on error
+                document.getElementById('loadingOverlay').style.display = 'none';
+                alert('Error running speedtest: ' + error);
             });
+    }
+
+    function toggleDebug() {
+        const debugSection = document.getElementById('debugSection');
+        debugSection.style.display = debugSection.style.display === 'none' ? 'block' : 'none';
     }
 </script>
 </body>
