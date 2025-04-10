@@ -27,18 +27,6 @@
             margin-top: 20px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
-        .stat-card {
-            border-radius: 10px;
-            background: white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-            text-align: center;
-            transition: transform 0.3s ease;
-        }
-        .stat-card:hover {
-            transform: translateY(-5px);
-        }
         .btn-success {
             background: linear-gradient(135deg, #00b09b, #96c93d);
             border: none;
@@ -97,23 +85,44 @@
             font-size: 14px;
             margin-top: 15px;
         }
-        .status-excellent {
+        .status-complete, .status-ok {
             background-color: #e8f5e9;
             color: #2e7d32;
         }
-        .status-good {
+        .status-running {
             background-color: #e3f2fd;
             color: #1565c0;
         }
-        .status-poor {
+        .status-error {
             background-color: #ffebee;
             color: #c62828;
+        }
+        .status-excellent {
+            background-color: #e8f5e9;
+            color: #2e7d32;
         }
         .gauge-container {
             width: 200px;
             height: 200px;
             margin: 0 auto;
             position: relative;
+        }
+        .gauge-label {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            font-weight: bold;
+            color: #555;
+        }
+        .gauge-min {
+            text-align: left;
+        }
+        .gauge-max {
+            text-align: right;
+        }
+        .direction-icon {
+            font-size: 24px;
+            margin: 15px 0;
         }
         .speedtest-info {
             background-color: #f5f5f5;
@@ -159,13 +168,6 @@
             font-size: 18px;
             color: #333;
         }
-        .gauge-range {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 10px;
-            font-weight: bold;
-            color: #555;
-        }
     </style>
 </head>
 <body>
@@ -178,10 +180,10 @@
     <h1><i class="fas fa-tachometer-alt icon"></i>🚀 Speedtest Results</h1>
 
     <!-- Error Alert -->
-    <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+    <div id="errorAlert" class="alert alert-danger" style="display: none;"></div>
 
     <div class="text-center mb-4">
-        <button class="btn btn-success" onclick="runSpeedtest()">
+        <button id="runSpeedtestBtn" class="btn btn-success" onclick="runSpeedtest()">
             <i class="fas fa-play icon"></i> Run New Speedtest
         </button>
     </div>
@@ -192,17 +194,19 @@
         <div class="row">
             <div class="col-md-6 text-center">
                 <div id="downloadGauge" class="gauge-container"></div>
-                <div id="gaugeRange" class="gauge-range">
-                    <span>0</span>
-                    <span id="maxSpeedLabel">100</span>
+                <div class="gauge-label">
+                    <span class="gauge-min">0</span>
+                    <span class="gauge-max"><span id="maxSpeed">2000</span></span>
                 </div>
+                <p><i class="fas fa-download text-primary"></i> <span id="directionText">Speed</span></p>
             </div>
             <div class="col-md-6 text-center">
                 <div class="text-center">
-                    <div class="speed-value" id="currentSpeedValue" th:text="${speedtest != null ? #numbers.formatInteger(speedtest.mbps, 0) : '0'}">0</div>
+                    <div id="speedValue" class="speed-value">0</div>
                     <div class="speed-unit">Mbps</div>
-                    <div class="status-badge" id="speedStatus">
-                        Not Run
+                    <div id="statusBadge" class="status-badge">Not Run</div>
+                    <div class="direction-icon">
+                        <i id="directionIcon" class="fas fa-long-arrow-alt-right"></i>
                     </div>
                 </div>
             </div>
@@ -210,28 +214,28 @@
     </div>
 
     <!-- Speedtest Details -->
-    <div class="card" th:if="${speedtest != null}">
+    <div class="card" id="testDetailsCard">
         <h4><i class="fas fa-info-circle icon"></i>Test Details</h4>
         <div class="speedtest-info">
             <div class="info-item">
                 <span class="info-label">Peer MAC</span>
-                <span class="info-value" th:text="${speedtest.peer_mac}">Unknown</span>
+                <span id="peerMac" class="info-value">-</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Direction</span>
-                <span class="info-value" th:text="${speedtest.reverse ? 'Download (Reverse)' : 'Upload (Forward)'}">Unknown</span>
+                <span id="direction" class="info-value">-</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Status</span>
-                <span class="info-value" th:text="${speedtest.status}">Unknown</span>
+                <span id="status" class="info-value">-</span>
             </div>
             <div class="info-item">
                 <span class="info-label">Speed</span>
-                <span class="info-value" th:text="${#numbers.formatInteger(speedtest.mbps, 0) + ' Mbps'}">0 Mbps</span>
+                <span id="speed" class="info-value">0 Mbps</span>
             </div>
-            <div class="info-item" th:if="${speedtest.error != null}">
+            <div class="info-item" id="errorItem" style="display: none;">
                 <span class="info-label">Error</span>
-                <span class="info-value text-danger" th:text="${speedtest.error}">None</span>
+                <span id="error" class="info-value text-danger">-</span>
             </div>
         </div>
     </div>
@@ -244,37 +248,154 @@
     </div>
     <div id="debugSection" class="card mt-3" style="display: none;">
         <h4><i class="fas fa-code icon"></i> Raw JSON Data</h4>
-        <pre th:text="${jsonResponse}">No data available</pre>
+        <pre id="jsonResponse">No data available</pre>
     </div>
 </div>
 
 <script th:inline="javascript">
-    // Get data from Thymeleaf
-    const speedtestJson = /*[[${jsonResponse}]]*/ '{}';
-    const speedtest = JSON.parse(speedtestJson);
+    // Get initial data from Thymeleaf
+    const initialSpeedtestJson = /*[[${jsonResponse}]]*/ '{}';
+    let speedtest = JSON.parse(initialSpeedtestJson);
 
-    // Create speed gauge with dynamic scaling
+    let gaugeChart = null;
+    let pollingInterval = null;
+
+    // Initialize the page with data
     document.addEventListener('DOMContentLoaded', function() {
-        const currentSpeed = speedtest ? Math.floor(speedtest.mbps) : 0;
-        document.getElementById('currentSpeedValue').textContent = currentSpeed;
+        updateUIWithSpeedtestData(speedtest);
+    });
 
-        // Dynamic gauge scaling based on speed
-        let maxSpeed;
-        if (currentSpeed <= 100) {
-            maxSpeed = 100;
-        } else if (currentSpeed <= 500) {
-            maxSpeed = 500;
-        } else if (currentSpeed <= 1000) {
-            maxSpeed = 1000;
-        } else {
-            maxSpeed = Math.ceil(currentSpeed / 1000) * 1000; // Round up to nearest 1000
+    function runSpeedtest() {
+        // Disable button during test
+        document.getElementById('runSpeedtestBtn').disabled = true;
+
+        // Show loading overlay
+        document.getElementById('loadingOverlay').style.display = 'flex';
+
+        // Clear any previous error
+        document.getElementById('errorAlert').style.display = 'none';
+
+        // Make POST request to start speedtest
+        fetch('/speedtest/run', { method: 'POST' })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to start speedtest');
+                }
+
+                // Start polling for results
+                startPollingForResults();
+            })
+            .catch(error => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('errorAlert').textContent = 'Error starting speedtest: ' + error.message;
+                document.getElementById('errorAlert').style.display = 'block';
+                document.getElementById('runSpeedtestBtn').disabled = false;
+            });
+    }
+
+    function startPollingForResults() {
+        // Clear any existing polling interval
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
         }
 
-        // Update max speed label
-        document.getElementById('maxSpeedLabel').textContent = maxSpeed;
+        // Setup interval to poll for results every 2 seconds
+        pollingInterval = setInterval(fetchSpeedtestResults, 2000);
+    }
 
-        // Create gauge with dynamic range
+    function fetchSpeedtestResults() {
+        fetch('/speedtest/results')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to fetch results');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Update the UI with the new data
+                updateUIWithSpeedtestData(data);
+
+                // Check if the test is completed
+                if (data.status === 'completed' || data.status === 'ok') {
+                    // Stop polling
+                    clearInterval(pollingInterval);
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                    document.getElementById('runSpeedtestBtn').disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching results:', error);
+            });
+    }
+
+    function updateUIWithSpeedtestData(data) {
+        if (!data) {
+            console.warn('No data provided to updateUIWithSpeedtestData');
+            return;
+        }
+
+        // Update speed value
+        const speedValue = document.getElementById('speedValue');
+        speedValue.textContent = Math.floor(data.mbps || 0);
+
+        // Update status badge
+        const statusBadge = document.getElementById('statusBadge');
+        statusBadge.textContent = data.status || 'Not Run';
+        statusBadge.className = 'status-badge';
+        if (data.status === 'completed' || data.status === 'ok') {
+            statusBadge.classList.add('status-complete');
+        } else if (data.status === 'running') {
+            statusBadge.classList.add('status-running');
+        } else if (data.status === 'excellent') {
+            statusBadge.classList.add('status-excellent');
+        } else {
+            statusBadge.classList.add('status-error');
+        }
+
+        // Update direction icon
+        const directionIcon = document.getElementById('directionIcon');
+        if (data.reverse) {
+            directionIcon.className = 'fas fa-exchange-alt';
+            document.getElementById('directionText').textContent = 'Download';
+        } else {
+            directionIcon.className = 'fas fa-long-arrow-alt-right';
+            document.getElementById('directionText').textContent = 'Upload';
+        }
+
+        // Update test details
+        document.getElementById('peerMac').textContent = data.peer_mac || '-';
+        document.getElementById('direction').textContent = data.reverse ? 'Download (Reverse)' : 'Upload (Forward)';
+        document.getElementById('status').textContent = data.status || '-';
+        document.getElementById('speed').textContent = (data.mbps ? Math.floor(data.mbps) + ' Mbps' : '0 Mbps');
+
+        // Show error if present
+        if (data.error) {
+            document.getElementById('errorItem').style.display = 'flex';
+            document.getElementById('error').textContent = data.error;
+        } else {
+            document.getElementById('errorItem').style.display = 'none';
+        }
+
+        // Update debug JSON
+        document.getElementById('jsonResponse').textContent = JSON.stringify(data, null, 2);
+
+        // Update gauge
+        updateGauge(data.mbps || 0);
+    }
+
+    function updateGauge(speed) {
+        // Determine max speed for gauge based on current speed
+        const maxSpeed = determineMaxSpeed(speed);
+        document.getElementById('maxSpeed').textContent = maxSpeed;
+
+        // Create or update gauge
         const gaugeElement = document.getElementById('downloadGauge');
+
+        // Clear previous gauge if it exists
+        while (gaugeElement.firstChild) {
+            gaugeElement.removeChild(gaugeElement.firstChild);
+        }
+
         const gaugeOptions = {
             hasNeedle: true,
             needleColor: 'rgba(0, 176, 155, 1)',
@@ -282,53 +403,19 @@
             arcColors: ['#f3f3f3', '#e1f5fe', '#b3e5fc', '#81d4fa', '#4fc3f7', '#29b6f6', '#03a9f4', '#039be5', '#0288d1', '#0277bd'],
             arcDelimiters: [10, 20, 30, 40, 50, 60, 70, 80, 90],
             rangeLabel: ['0', maxSpeed.toString()],
-            centralLabel: currentSpeed.toString(),
-            arcPadding: 6,
-            arcPaddingColor: 'white',
-            needleStart: 0
+            centralLabel: Math.floor(speed).toString()
         };
 
-        // Calculate percentage for needle position (capped at 100%)
-        const needlePosition = Math.min((currentSpeed / maxSpeed) * 100, 100);
-        GaugeChart.gaugeChart(gaugeElement, 300, gaugeOptions).updateNeedle(needlePosition);
+        GaugeChart.gaugeChart(gaugeElement, 300, gaugeOptions).updateNeedle(Math.min(speed * 100 / maxSpeed, 100));
+    }
 
-        // Update the status display based on speed
-        const statusElement = document.getElementById('speedStatus');
-        if (currentSpeed > 0) {
-            if (currentSpeed >= 100) {
-                statusElement.textContent = 'Excellent';
-                statusElement.className = 'status-badge status-excellent';
-            } else if (currentSpeed >= 50) {
-                statusElement.textContent = 'Good';
-                statusElement.className = 'status-badge status-good';
-            } else {
-                statusElement.textContent = 'Poor';
-                statusElement.className = 'status-badge status-poor';
-            }
-        } else if (speedtest && speedtest.status) {
-            statusElement.textContent = speedtest.status;
-            statusElement.className = 'status-badge ' +
-                (speedtest.status === 'completed' ? 'status-excellent' :
-                    speedtest.status === 'running' ? 'status-good' : 'status-poor');
-        }
-    });
-
-    function runSpeedtest() {
-        // Show loading overlay
-        document.getElementById('loadingOverlay').style.display = 'flex';
-
-        fetch('/speedtest/run', { method: 'POST' })
-            .then(response => response.text())
-            .then(html => {
-                document.open();
-                document.write(html);
-                document.close();
-            })
-            .catch(error => {
-                // Hide loading overlay on error
-                document.getElementById('loadingOverlay').style.display = 'none';
-                alert('Error running speedtest: ' + error);
-            });
+    function determineMaxSpeed(speed) {
+        if (speed <= 0) return 100;
+        if (speed <= 100) return 100;
+        if (speed <= 500) return 500;
+        if (speed <= 1000) return 1000;
+        if (speed <= 2000) return 2000;
+        return Math.ceil(speed / 1000) * 1000;
     }
 
     function toggleDebug() {
